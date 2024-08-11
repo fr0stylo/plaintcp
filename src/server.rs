@@ -8,14 +8,17 @@ use mio::{Events, Interest, Poll, Token};
 use mio::event::Event;
 use mio::net::{TcpListener, TcpStream};
 
-use crate::cache::CacheServer;
+use crate::cache::{Cache, CacheServer, middlewares};
 use crate::cli::Args;
 use crate::proto;
 use crate::proto::RequestCommand;
 
 const SERVER: Token = Token(0);
 
-pub fn start<S: CacheServer>(args: &Args, cache: S) -> Result<(), Box<dyn Error>> {
+pub fn start(args: &Args) -> Result<(), Box<dyn Error>> {
+    let cache = Cache::new();
+    let middlewared = middlewares::Logger::new(&cache);
+
     let mut poll = Poll::new()?;
     let mut events = Events::with_capacity(128);
 
@@ -64,7 +67,7 @@ pub fn start<S: CacheServer>(args: &Args, cache: S) -> Result<(), Box<dyn Error>
                 }
                 token => {
                     let done = if let Some(connection) = connections.get_mut(&token) {
-                        handle_connection_event(connection, event, &bootstrapedCache)?
+                        handle_connection_event(connection, event, &middlewared)?
                     } else {
                         // Sporadic events happen, we can safely ignore them.
                         false

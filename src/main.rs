@@ -30,10 +30,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     if args.server {
-        let cache = Cache::new();
-        let middlewared = middlewares::Logger::new(&cache);
-
-        return server::start(&args, &middlewared);
+        return server::start(&args);
     }
 
     client::start(&args)
