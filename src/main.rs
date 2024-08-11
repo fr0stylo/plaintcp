@@ -1,6 +1,7 @@
 use std::error::Error;
 
 use clap::Parser;
+use cache::{Cache, middlewares};
 
 use crate::cli::Args;
 
@@ -29,10 +30,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     if args.server {
-        let cache = cache::Cache::new();
-        let bootstrapedCache = cache::middlewares::Logger::new(&cache);
+        let cache = Cache::new();
+        let middlewared = middlewares::Logger::new(&cache);
 
-        return server::start(&args, &bootstrapedCache);
+        return server::start(&args, &middlewared);
     }
 
     client::start(&args)
