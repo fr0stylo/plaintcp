@@ -1,8 +1,11 @@
 use std::error::Error;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
+use promkit::preset::readline::Readline;
+use promkit::suggest::Suggest;
 
 use proto::Frame;
+use regex::Regex;
 
 use crate::cli::Args;
 use crate::proto;
@@ -27,4 +30,29 @@ pub fn start(args: &Args) -> Result<(), Box<dyn Error>> {
         println!("Response ({:?}) : {:?}", t.elapsed().unwrap(), res.unwrap());
         sleep(Duration::from_millis(200));
     }
+}
+
+pub fn interactive(args: &Args) -> Result<(), Box<dyn Error>> {
+    let mut p = Readline::default()
+        .enable_suggest(Suggest::from_iter([
+            "GET",
+            "SET",
+            "DELETE",
+        ]))
+        .prompt()?;
+
+    let res = p.run()?;
+    match res.as_str() {
+        x if Regex::new("GET (.*)").unwrap().is_match(x) => {
+            println!("{}", x)
+        }
+        x if Regex::new("SET (.*) (.*)").unwrap().is_match(x) => {
+            println!("{}", x)
+        }
+        x if Regex::new("DELETE (.*)").unwrap().is_match(x) => {
+            println!("{}", x)
+        }
+        _ => {}
+    }
+    Ok(())
 }

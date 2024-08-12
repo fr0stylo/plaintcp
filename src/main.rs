@@ -14,8 +14,20 @@ pub mod cli {
         #[arg(short, long, default_value_t = false)]
         pub server: bool,
 
+        #[arg(short, long, default_value_t = false)]
+        pub test: bool,
+
+        #[arg(short, long, default_value_t = false)]
+        pub verbose: bool,
+
         #[arg(short, long, default_value_t = ("127.0.0.1:9000").to_owned())]
         pub addr: String,
+
+        #[arg(short, long, default_value_t = ("./wal.log").to_owned())]
+        pub wal: String,
+
+        #[clap(short, long, value_parser, num_args = 1.., value_delimiter = ' ')]
+        pub replica: Vec<String>,
     }
 }
 
@@ -33,18 +45,23 @@ fn main() -> Result<(), Box<dyn Error>> {
         return server::start(&args);
     }
 
-    let a = args.clone();
-    let t = thread::spawn(move || {
-        client::start(&a).expect("Not working");
-    });
-    for _i in 0..10 {
+    if args.test {
         let a = args.clone();
-        thread::spawn(move || {
+        let t = thread::spawn(move || {
             client::start(&a).expect("Not working");
         });
+        for _i in 0..10 {
+            let a = args.clone();
+            thread::spawn(move || {
+                client::start(&a).expect("Not working");
+            });
+        }
+
+        t.join().expect("TODO: panic message");
+
+        return Ok(());
     }
 
-    t.join().expect("TODO: panic message");
-    Ok(())
+    client::interactive(&args)
 }
 

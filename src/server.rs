@@ -17,8 +17,9 @@ const SERVER: Token = Token(0);
 
 pub fn start(args: &Args) -> Result<(), Box<dyn Error>> {
     let cache = Cache::new();
-    let middlewared = middlewares::WriteLog::new("./test.log", &cache);
-    let middlewared = middlewares::Logger::new(&middlewared);
+    let middlewared = middlewares::WriteLog::new(&args.wal.clone(), &cache);
+    let middlewared = middlewares::Replicator::new(args.clone().replica, &middlewared);
+    let middlewared = middlewares::Logger::new(args.verbose, &middlewared);
 
     let mut poll = Poll::new()?;
     let mut events = Events::with_capacity(128);
