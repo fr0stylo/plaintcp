@@ -22,7 +22,7 @@ pub fn start(args: &Args) -> Result<(), Box<dyn Error>> {
         proto::encode(&con, &Frame::new(RequestCommand::Get("asdasdasda".to_owned())))?;
         let res = proto::decode(&con)?;
         println!("Response ({:?}) : {:?}", t.elapsed().unwrap(), res.unwrap());
-        proto::encode(&con, &Frame::new(RequestCommand::Del("asdasdasda".to_owned())))?;
+        proto::encode(&con, &Frame::new(RequestCommand::Delete("asdasdasda".to_owned())))?;
         let res = proto::decode(&con)?;
         println!("Response ({:?}) : {:?}", t.elapsed().unwrap(), res.unwrap());
         sleep(Duration::from_millis(200));

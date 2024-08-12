@@ -1,14 +1,14 @@
 use std::error::Error;
+use std::thread;
 
 use clap::Parser;
-use cache::{Cache, middlewares};
 
 use crate::cli::Args;
 
 pub mod cli {
     use clap::Parser;
 
-    #[derive(Parser, Debug)]
+    #[derive(Parser, Debug, Clone)]
     #[command(version, about, long_about = None)]
     pub struct Args {
         #[arg(short, long, default_value_t = false)]
@@ -33,6 +33,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         return server::start(&args);
     }
 
-    client::start(&args)
+    let a = args.clone();
+    let t = thread::spawn(move || {
+        client::start(&a).expect("Not working");
+    });
+    for _i in 0..10 {
+        let a = args.clone();
+        thread::spawn(move || {
+            client::start(&a).expect("Not working");
+        });
+    }
+
+    t.join().expect("TODO: panic message");
+    Ok(())
 }
 

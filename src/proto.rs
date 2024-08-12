@@ -11,7 +11,9 @@ pub enum RequestCommand {
     Empty,
     Get(String),
     Set(String, Vec<u8>),
-    Del(String),
+    Delete(String),
+    
+    Error(Vec<u8>),
     Recv(Vec<u8>),
 }
 

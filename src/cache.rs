@@ -24,7 +24,7 @@ impl CacheServer for &Cache {
             RequestCommand::Set(key, val) => {
                 self.set(key, val.clone()).unwrap()
             }
-            RequestCommand::Del(key) => {
+            RequestCommand::Delete(key) => {
                 self.delete(key).unwrap()
             }
             _ => {
@@ -37,7 +37,7 @@ impl CacheServer for &Cache {
 impl Cache {
     pub fn new() -> Self {
         Self {
-            storage: Arc::new(Mutex::new(HashMap::new()))
+            storage: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 

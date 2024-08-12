@@ -200,6 +200,7 @@ dependencies = [
  "bincode",
  "clap",
  "env_logger",
+ "log",
  "mio",
  "serde",
 ]
