@@ -59,20 +59,20 @@ cargo run -- --client --addr <server-address>
 
 ## Dependencies
 
-`clap` for command-line parsing.
-`serde` for serialization and deserialization.
-`rand, regex` for additional client functionalities.
-`promkit` for interactive prompts in the client.
+- `clap` for command-line parsing.
+- `serde` for serialization and deserialization.
+- `rand, regex` for additional client functionalities.
+- `promkit` for interactive prompts in the client.
 
 ## Configuration
 
 The application can be configured using command-line arguments:
 
-`--server`: Start in server mode.
-`--client`: Start in client mode.
-`--addr`: Specify the server address (client mode).
-`--verbose`: Enable verbose output.
-`--test`: Run in test mode.
+- `--server`: Start in server mode.
+- `--client`: Start in client mode.
+- `--addr`: Specify the server address (client mode).
+- `--verbose`: Enable verbose output.
+- `--test`: Run in test mode.
 
 ## Documentation
 
@@ -101,18 +101,16 @@ cargo run -- --client --addr 127.0.0.1:8080
 
 Use the client to interact with the server:
 
-Set a value: `set <key> <value>`
-Get a value: `get <key>`
-Delete a value: `delete <key>`
+- Set a value: `set <key> <value>`
+- Get a value: `get <key>`
+- Delete a value: `delete <key>`
 
 ## Troubleshooting
 
 Connection Issues: Ensure the server is running and reachable at the specified address.
+
 Command Parsing: Verify the command-line arguments are correct.
 
-## Contributors
-
-Žymantas Maumevičius - Initial development
 
 ## License
 
