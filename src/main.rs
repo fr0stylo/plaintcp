@@ -37,7 +37,12 @@ pub mod client;
 pub mod server;
 
 
+use libc::{sched_setscheduler, sched_param, SCHED_FIFO};
+
 fn main() -> Result<(), Box<dyn Error>> {
+    let param = sched_param { sched_priority: 99 };
+    unsafe { sched_setscheduler(0, SCHED_FIFO, &param) };
+
     let args = Args::parse();
     env_logger::init();
 

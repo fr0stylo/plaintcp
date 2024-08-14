@@ -103,7 +103,7 @@ impl WriteLog {
 }
 
 pub struct Replicator {
-    tx: SyncSender<RequestCommand>,
+    tx: Sender<RequestCommand>,
 }
 
 
@@ -126,7 +126,7 @@ impl Middleware for &Replicator {
 impl Replicator {
     pub fn new(addrs: Vec<String>) -> Self {
         let addrs = addrs.clone();
-        let (tx, rx) = sync_channel::<RequestCommand>(100);
+        let (tx, rx) = channel::<RequestCommand>();
 
         thread::spawn(move || {
             let mut replicas = HashMap::new();
