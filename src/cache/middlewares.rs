@@ -3,57 +3,49 @@ use std::fmt::Debug;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::net::TcpStream;
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, Sender, sync_channel, SyncSender};
 use std::thread;
 use std::time::SystemTime;
+
 use proto::encode;
 
-use crate::cache::CacheServer;
 use crate::proto;
 use crate::proto::RequestCommand;
 
-#[derive(Debug)]
-pub struct Logger<S> where S: CacheServer {
-    verbose: bool,
-    inner: S,
-}
-
-impl<S> Logger<S> where S: CacheServer {
-    pub fn new(verbose: bool, inner: S) -> Self {
-        Logger {
-            verbose,
-            inner,
-        }
-    }
-}
-
-impl<S> CacheServer for Logger<S> where S: CacheServer {
-    fn on_request(&self, f: &RequestCommand) -> Vec<u8> {
-        if self.verbose {
-            println!("{:?}", f);
-        }
-        self.inner.on_request(f)
-    }
-}
-
-impl<S> CacheServer for &Logger<S> where S: CacheServer {
-    fn on_request(&self, f: &RequestCommand) -> Vec<u8> {
-        let t = SystemTime::now();
-        let res = self.inner.on_request(f);
-        if self.verbose {
-            println!("[{:?}] {:?}", t.elapsed().unwrap(), f);
-        }
-        res
-    }
-}
-
-pub struct WriteLog<S: CacheServer> {
-    inner: S,
+pub struct WriteLog {
     tx: Sender<RequestCommand>,
 }
 
-impl<S: CacheServer> CacheServer for &WriteLog<S> {
-    fn on_request(&self, f: &RequestCommand) -> Vec<u8> {
+pub trait Middleware {
+    fn on_request(&self, f: &RequestCommand, next: MiddlewareNext) -> Vec<u8> {
+        next.on_request(f)
+    }
+}
+
+pub struct MiddlewareNext<'a> {
+    middlewares: &'a mut (dyn Iterator<Item=&'a dyn Middleware>),
+    request_fn: Box<dyn FnOnce(&RequestCommand) -> Vec<u8> + 'a>,
+}
+
+impl<'a> MiddlewareNext<'a> {
+    pub fn new(mw: &'a mut (dyn Iterator<Item=&'a dyn Middleware>), req: Box<dyn FnOnce(&RequestCommand) -> Vec<u8> + 'a>) -> Self {
+        MiddlewareNext {
+            middlewares: mw,
+            request_fn: req,
+        }
+    }
+    pub fn on_request(self, request: &RequestCommand) -> Vec<u8> {
+        if let Some(step) = self.middlewares.next() {
+            step.on_request(request, self)
+        } else {
+            (self.request_fn)(request)
+        }
+    }
+}
+
+
+impl Middleware for &WriteLog {
+    fn on_request(&self, f: &RequestCommand, next: MiddlewareNext) -> Vec<u8> {
         match f {
             RequestCommand::Set(_, _) => {
                 self.tx.send(f.clone()).expect("[WAL] Failed to send message for sink");
@@ -64,12 +56,12 @@ impl<S: CacheServer> CacheServer for &WriteLog<S> {
             _ => {}
         }
 
-        self.inner.on_request(f)
+        next.on_request(f)
     }
 }
 
-impl<S: CacheServer> WriteLog<S> {
-    pub fn new(path: &str, inner: S) -> Self {
+impl WriteLog {
+    pub fn new(path: &str) -> Self {
         let (tx, rx) = channel::<RequestCommand>();
 
         let path = path.to_owned();
@@ -88,32 +80,22 @@ impl<S: CacheServer> WriteLog<S> {
 
                 size.append(&mut buf);
                 w.write(&*size).unwrap();
-                w.flush().unwrap();
             }
         });
 
         WriteLog {
-            inner,
             tx,
         }
     }
 }
 
-pub struct Replicator<S> where S: CacheServer {
-    inner: S,
-    tx: Sender<RequestCommand>,
+pub struct Replicator {
+    tx: SyncSender<RequestCommand>,
 }
 
-impl<S> CacheServer for Replicator<S> where S: CacheServer {
-    fn on_request(&self, f: &RequestCommand) -> Vec<u8> {
-        self.tx.send(f.clone()).expect("[Replicator] Failed to send message for sink");
 
-        self.inner.on_request(f)
-    }
-}
-
-impl<S> CacheServer for &Replicator<S> where S: CacheServer {
-    fn on_request(&self, f: &RequestCommand) -> Vec<u8> {
+impl Middleware for &Replicator {
+    fn on_request(&self, f: &RequestCommand, next: MiddlewareNext) -> Vec<u8> {
         match f {
             RequestCommand::Set(_, _) => {
                 self.tx.send(f.clone()).expect("[Replicator] Failed to send message for sink");
@@ -124,39 +106,65 @@ impl<S> CacheServer for &Replicator<S> where S: CacheServer {
             _ => {}
         }
 
-        self.inner.on_request(f)
+        next.on_request(f)
     }
 }
 
-impl<S> Replicator<S> where S: CacheServer {
-    pub fn new(addrs: Vec<String>, inner: S) -> Self {
+impl Replicator {
+    pub fn new(addrs: Vec<String>) -> Self {
         let addrs = addrs.clone();
-        let (tx, rx) = channel::<RequestCommand>();
+        let (tx, rx) = sync_channel::<RequestCommand>(100);
 
         thread::spawn(move || {
             let mut replicas = HashMap::new();
 
             for addr in addrs {
                 let s = TcpStream::connect(&addr).expect("[Replicator] connection failed");
+                s.set_nodelay(true).unwrap();
+                s.set_nonblocking(true).unwrap();
 
                 replicas.insert(addr, s);
             }
 
-            loop {
-                let x = rx.recv().expect("[Replicator] error while receiving, closing ");
-                println!("Sending {:?}", x);
-                replicas.iter().clone().for_each(|(_, replica)| {
+            let mut i = 0;
+            for x in rx.iter() {
+                replicas.iter().clone().for_each(|(z, replica)| {
+                    i = i + 1;
+                    println!("socketAddr: {}", z);
+
                     encode(replica, &proto::Frame::new(x.clone())).expect("[Replicator] error while replicating");
-                })
+                });
+                println!("sent {}", i)
             }
         });
 
         Replicator {
-            inner,
             tx,
         }
     }
 }
 
-pub trait CacheMiddleware {}
 
+#[derive(Debug)]
+pub struct Logger {
+    verbose: bool,
+}
+
+impl Logger {
+    pub fn new(verbose: bool) -> Self {
+        Logger {
+            verbose
+        }
+    }
+}
+
+impl Middleware for &Logger {
+    fn on_request(&self, f: &RequestCommand, next: MiddlewareNext) -> Vec<u8> {
+        let t = SystemTime::now();
+        let res = next.on_request(f);
+        if self.verbose {
+            println!("[{:?}] {:?}", t.elapsed().unwrap(), f);
+        }
+        res
+    }
+}

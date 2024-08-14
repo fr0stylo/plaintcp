@@ -1,3 +1,5 @@
+#![feature(fn_traits)]
+
 use std::error::Error;
 use std::thread;
 

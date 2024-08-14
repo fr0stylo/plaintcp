@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicI64, Ordering};
 
 use crate::proto::RequestCommand;
 
@@ -13,18 +14,22 @@ pub trait CacheServer {
 #[derive(Debug, Clone)]
 pub struct Cache {
     storage: Arc<Mutex<HashMap<String, Vec<u8>>>>,
+    actions: Arc<AtomicI64>,
 }
 
 impl CacheServer for &Cache {
     fn on_request(&self, c: &RequestCommand) -> Vec<u8> {
+        println!("{:?}", self.actions);
         match c {
             RequestCommand::Get(key) => {
                 self.get(key).unwrap()
             }
             RequestCommand::Set(key, val) => {
+                self.actions.fetch_add(1, Ordering::Relaxed);
                 self.set(key, val.clone()).unwrap()
             }
             RequestCommand::Delete(key) => {
+                self.actions.fetch_add(1, Ordering::Relaxed);
                 self.delete(key).unwrap()
             }
             _ => {
@@ -38,6 +43,7 @@ impl Cache {
     pub fn new() -> Self {
         Self {
             storage: Arc::new(Mutex::new(HashMap::new())),
+            actions: Arc::new(AtomicI64::new(0)),
         }
     }
 

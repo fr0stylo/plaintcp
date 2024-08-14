@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display, Formatter};
 use std::io::{Read, Write};
 use std::mem::size_of;
 
@@ -12,7 +12,7 @@ pub enum RequestCommand {
     Get(String),
     Set(String, Vec<u8>),
     Delete(String),
-    
+
     Error(Vec<u8>),
     Recv(Vec<u8>),
 }
@@ -22,6 +22,20 @@ impl Default for RequestCommand {
         RequestCommand::Empty
     }
 }
+
+impl Display for RequestCommand {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RequestCommand::Empty => { write!(f, "EMPTY") }
+            RequestCommand::Get(key) => { write!(f, "GET {}", key) }
+            RequestCommand::Set(key, body) => { write!(f, "SET {}, {}", key, String::from_utf8(body.clone()).unwrap()) }
+            RequestCommand::Delete(key) => { write!(f, "DELETE {}", key) }
+            RequestCommand::Error(error) => { write!(f, "ERROR {}", String::from_utf8(error.clone()).unwrap()) }
+            RequestCommand::Recv(buf) => { write!(f, "<< {}", String::from_utf8(buf.clone()).unwrap()) }
+        }
+    }
+}
+
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Frame {
@@ -49,7 +63,6 @@ pub fn decode<T: Read>(mut r: T) -> Result<Option<RequestCommand>, std::io::Erro
     }
     let size = usize::from_le_bytes(buf);
     let mut buf = vec![0u8; size];
-
     let i = r.read(&mut buf)?;
     if i == 0 {
         return Ok(None);
@@ -66,6 +79,5 @@ pub fn encode<T: Write>(mut w: T, f: &Frame) -> Result<usize, std::io::Error> {
     size.append(&mut buf);
 
     let i = w.write(&*size)?;
-    w.flush()?;
     Ok(i)
 }

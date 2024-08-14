@@ -9,6 +9,7 @@ use mio::event::Event;
 use mio::net::{TcpListener, TcpStream};
 
 use crate::cache::{Cache, CacheServer, middlewares};
+use crate::cache::middlewares::{Middleware, MiddlewareNext};
 use crate::cli::Args;
 use crate::proto;
 use crate::proto::RequestCommand;
@@ -16,13 +17,20 @@ use crate::proto::RequestCommand;
 const SERVER: Token = Token(0);
 
 pub fn start(args: &Args) -> Result<(), Box<dyn Error>> {
-    let cache = Cache::new();
-    let middlewared = middlewares::WriteLog::new(&args.wal.clone(), &cache);
-    let middlewared = middlewares::Replicator::new(args.clone().replica, &middlewared);
-    let middlewared = middlewares::Logger::new(args.verbose, &middlewared);
+    let log = middlewares::Logger::new(args.verbose);
+    let wal = middlewares::WriteLog::new(&args.wal.clone());
+    let replicator = middlewares::Replicator::new(args.clone().replica);
+
+    let mw: Vec<Box<dyn Middleware>> = vec![
+        Box::new(&log),
+        Box::new(&wal),
+        Box::new(&replicator),
+    ];
+
+    let cache = &Cache::new();
 
     let mut poll = Poll::new()?;
-    let mut events = Events::with_capacity(128);
+    let mut events = Events::with_capacity(512);
 
     let addr = args.addr.parse()?;
     let mut server = TcpListener::bind(addr)?;
@@ -69,7 +77,12 @@ pub fn start(args: &Args) -> Result<(), Box<dyn Error>> {
                 }
                 token => {
                     let done = if let Some(connection) = connections.get_mut(&token) {
-                        handle_connection_event(connection, event, &middlewared)?
+                        handle_connection_event(connection, event, |x| {
+                            MiddlewareNext::new(
+                                &mut mw.iter().map(|mw| mw.as_ref()),
+                                Box::new(|r| { cache.on_request(r) }),
+                            ).on_request(x)
+                        })?
                     } else {
                         // Sporadic events happen, we can safely ignore them.
                         false
@@ -87,7 +100,7 @@ pub fn start(args: &Args) -> Result<(), Box<dyn Error>> {
 }
 
 
-fn handle_connection_event<T: CacheServer>(
+fn handle_connection_event<T: Fn(&RequestCommand) -> Vec<u8>>(
     connection: &mut TcpStream,
     event: &Event,
     cache: T,
@@ -95,10 +108,8 @@ fn handle_connection_event<T: CacheServer>(
     if event.is_readable() {
         let c = connection.deref();
 
-        let mut command: RequestCommand = RequestCommand::default();
-
         loop {
-            command = match proto::decode(c) {
+            let command = match proto::decode(c) {
                 Ok(Some(x)) => x,
                 Err(ref err) if would_block(err) => break,
                 Err(ref err) if interrupted(err) => continue,
@@ -109,11 +120,9 @@ fn handle_connection_event<T: CacheServer>(
                     return Ok(true);
                 }
             };
-            break;
+            let res = cache(&command);
+            proto::encode(c, &proto::Frame::new(RequestCommand::Recv(res)))?;
         }
-
-        let res = cache.on_request(&command);
-        proto::encode(c, &proto::Frame::new(RequestCommand::Recv(res)))?;
     }
 
     Ok(false)
