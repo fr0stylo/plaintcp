@@ -1,19 +1,19 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::OpenOptions;
-use std::io::{BufWriter, Write};
+use std::io::{BufWriter, Read, Write};
 use std::net::TcpStream;
 use std::sync::mpsc::{channel, Sender, sync_channel, SyncSender};
 use std::thread;
 use std::time::SystemTime;
 
-use proto::encode;
-
+use crate::cache::CacheServer;
 use crate::proto;
-use crate::proto::RequestCommand;
+use crate::proto::{Frame, RequestCommand};
 
 pub struct WriteLog {
     tx: Sender<RequestCommand>,
+    pub path: String,
 }
 
 pub trait Middleware {
@@ -61,30 +61,43 @@ impl Middleware for &WriteLog {
 }
 
 impl WriteLog {
+    pub fn preload(&self, cache: &impl CacheServer) {
+        let f = OpenOptions::new()
+            .read(true)
+            .open(self.path.clone()).unwrap();
+
+        let t = SystemTime::now();
+        println!("Preloading previous state...");
+        let mut i = 0;
+        while let Some(x) = proto::deserialize(&f).unwrap() {
+            cache.on_request(&x);
+            i += 1;
+        }
+        println!("Preloaded {} items in {:?}", i, t.elapsed().unwrap());
+    }
+
     pub fn new(path: &str) -> Self {
         let (tx, rx) = channel::<RequestCommand>();
 
-        let path = path.to_owned();
+        let tpath = path.to_owned();
         thread::spawn(move || {
             let f = OpenOptions::new()
                 .write(true)
                 .create(true)
                 .append(true)
-                .open(path)
+                .open(tpath)
                 .unwrap();
             let mut w = BufWriter::new(f);
-            loop {
-                let x = rx.recv().expect("[WAL] error while receiving, closing file logger");
-                let mut buf = bincode::serialize(&x).unwrap();
-                let mut size = buf.len().to_le_bytes().to_vec();
+            for x in rx.iter() {
+                let buf: Vec<u8> = x.into();
 
-                size.append(&mut buf);
-                w.write(&*size).unwrap();
+                w.write(&*buf).unwrap();
             }
         });
 
         WriteLog {
             tx,
+            path: path.to_string(),
         }
     }
 }
@@ -126,15 +139,11 @@ impl Replicator {
                 replicas.insert(addr, s);
             }
 
-            let mut i = 0;
             for x in rx.iter() {
-                replicas.iter().clone().for_each(|(z, replica)| {
-                    i = i + 1;
-                    println!("socketAddr: {}", z);
-
-                    encode(replica, &proto::Frame::new(x.clone())).expect("[Replicator] error while replicating");
+                replicas.iter().clone().for_each(|(_, mut replica)| {
+                    let buf: Vec<u8> = Frame::new(x.clone()).into();
+                    replica.write(&*buf).expect("[Replicator] error while replicating");
                 });
-                println!("sent {}", i)
             }
         });
 

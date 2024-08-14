@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::io;
+use std::io::Write;
 use std::ops::Deref;
 use std::time::SystemTime;
 
@@ -12,7 +13,7 @@ use crate::cache::{Cache, CacheServer, middlewares};
 use crate::cache::middlewares::{Middleware, MiddlewareNext};
 use crate::cli::Args;
 use crate::proto;
-use crate::proto::RequestCommand;
+use crate::proto::{Frame, RequestCommand};
 
 const SERVER: Token = Token(0);
 
@@ -28,6 +29,8 @@ pub fn start(args: &Args) -> Result<(), Box<dyn Error>> {
     ];
 
     let cache = &Cache::new();
+
+    wal.preload(&cache);
 
     let mut poll = Poll::new()?;
     let mut events = Events::with_capacity(512);
@@ -106,10 +109,10 @@ fn handle_connection_event<T: Fn(&RequestCommand) -> Vec<u8>>(
     cache: T,
 ) -> io::Result<bool> {
     if event.is_readable() {
-        let c = connection.deref();
+        let mut c = connection.deref();
 
         loop {
-            let command = match proto::decode(c) {
+            let request: Frame = match proto::deserialize(c) {
                 Ok(Some(x)) => x,
                 Err(ref err) if would_block(err) => break,
                 Err(ref err) if interrupted(err) => continue,
@@ -120,8 +123,10 @@ fn handle_connection_event<T: Fn(&RequestCommand) -> Vec<u8>>(
                     return Ok(true);
                 }
             };
-            let res = cache(&command);
-            proto::encode(c, &proto::Frame::new(RequestCommand::Recv(res)))?;
+            let res = cache(&request.clone().into());
+            let buf: Vec<u8> = request.to_response(RequestCommand::Recv(res)).into();
+            c.write(&*buf)?;
+            // proto::encode(c, &)?;
         }
     }
 
