@@ -1,15 +1,13 @@
 use std::error::Error;
-use std::ops::Deref;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
-use clap::Command;
-use mio::net::TcpStream;
+
 use promkit::preset::readline::Readline;
 use promkit::suggest::Suggest;
 use rand::distributions::{Alphanumeric, DistString};
+use regex::Regex;
 
 use proto::Frame;
-use regex::{Captures, Regex};
 
 use crate::cli::Args;
 use crate::proto;
@@ -39,7 +37,7 @@ pub fn start(args: &Args) -> Result<(), Box<dyn Error>> {
 }
 
 fn execute_request(con: &std::net::TcpStream, frame: &RequestCommand) -> Result<Option<RequestCommand>, std::io::Error> {
-    let con = con.deref();
+    let con = con;
     proto::encode(con, &Frame::new(frame.clone()))?;
     let res = proto::decode(con)?;
     Ok(res)
