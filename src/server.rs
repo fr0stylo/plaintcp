@@ -22,11 +22,7 @@ pub fn start(args: &Args) -> Result<(), Box<dyn Error>> {
     let wal = middlewares::WriteLog::new(&args.wal.clone());
     let replicator = middlewares::Replicator::new(args.clone().replica);
 
-    let mw: Vec<Box<dyn Middleware>> = vec![
-        Box::new(&log),
-        Box::new(&wal),
-        Box::new(&replicator),
-    ];
+    let mw: Vec<Box<dyn Middleware>> = vec![Box::new(&log), Box::new(&wal), Box::new(&replicator)];
 
     let cache = &Cache::new();
 
@@ -70,21 +66,19 @@ pub fn start(args: &Args) -> Result<(), Box<dyn Error>> {
                     println!("Accepted connection from: {}", address);
 
                     let token = next(&mut client_token);
-                    poll.registry().register(
-                        &mut connection,
-                        token,
-                        Interest::READABLE,
-                    )?;
+                    poll.registry()
+                        .register(&mut connection, token, Interest::READABLE)?;
 
                     connections.insert(token, connection);
-                }
+                },
                 token => {
                     let done = if let Some(connection) = connections.get_mut(&token) {
                         handle_connection_event(connection, event, |x| {
                             MiddlewareNext::new(
                                 &mut mw.iter().map(|mw| mw.as_ref()),
-                                Box::new(|r| { cache.on_request(r) }),
-                            ).on_request(x)
+                                Box::new(|r| cache.on_request(r)),
+                            )
+                            .on_request(x)
                         })?
                     } else {
                         // Sporadic events happen, we can safely ignore them.
@@ -101,7 +95,6 @@ pub fn start(args: &Args) -> Result<(), Box<dyn Error>> {
         println!("Event loop {:?}", t.elapsed());
     }
 }
-
 
 fn handle_connection_event<T: Fn(&RequestCommand) -> Vec<u8>>(
     connection: &mut TcpStream,

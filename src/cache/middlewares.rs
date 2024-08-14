@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Read, Write};
 use std::net::TcpStream;
-use std::sync::mpsc::{channel, Sender, sync_channel, SyncSender};
+use std::sync::mpsc::{channel, Sender};
 use std::thread;
 use std::time::SystemTime;
 
@@ -23,12 +23,15 @@ pub trait Middleware {
 }
 
 pub struct MiddlewareNext<'a> {
-    middlewares: &'a mut (dyn Iterator<Item=&'a dyn Middleware>),
+    middlewares: &'a mut (dyn Iterator<Item = &'a dyn Middleware>),
     request_fn: Box<dyn FnOnce(&RequestCommand) -> Vec<u8> + 'a>,
 }
 
 impl<'a> MiddlewareNext<'a> {
-    pub fn new(mw: &'a mut (dyn Iterator<Item=&'a dyn Middleware>), req: Box<dyn FnOnce(&RequestCommand) -> Vec<u8> + 'a>) -> Self {
+    pub fn new(
+        mw: &'a mut (dyn Iterator<Item = &'a dyn Middleware>),
+        req: Box<dyn FnOnce(&RequestCommand) -> Vec<u8> + 'a>,
+    ) -> Self {
         MiddlewareNext {
             middlewares: mw,
             request_fn: req,
@@ -43,15 +46,18 @@ impl<'a> MiddlewareNext<'a> {
     }
 }
 
-
 impl Middleware for &WriteLog {
     fn on_request(&self, f: &RequestCommand, next: MiddlewareNext) -> Vec<u8> {
         match f {
             RequestCommand::Set(_, _) => {
-                self.tx.send(f.clone()).expect("[WAL] Failed to send message for sink");
+                self.tx
+                    .send(f.clone())
+                    .expect("[WAL] Failed to send message for sink");
             }
             RequestCommand::Delete(_) => {
-                self.tx.send(f.clone()).expect("[WAL] Failed to send message for sink");
+                self.tx
+                    .send(f.clone())
+                    .expect("[WAL] Failed to send message for sink");
             }
             _ => {}
         }
@@ -64,7 +70,8 @@ impl WriteLog {
     pub fn preload(&self, cache: &impl CacheServer) {
         let f = OpenOptions::new()
             .read(true)
-            .open(self.path.clone()).unwrap();
+            .open(self.path.clone())
+            .unwrap();
 
         let t = SystemTime::now();
         println!("Preloading previous state...");
@@ -106,15 +113,18 @@ pub struct Replicator {
     tx: Sender<RequestCommand>,
 }
 
-
 impl Middleware for &Replicator {
     fn on_request(&self, f: &RequestCommand, next: MiddlewareNext) -> Vec<u8> {
         match f {
             RequestCommand::Set(_, _) => {
-                self.tx.send(f.clone()).expect("[Replicator] Failed to send message for sink");
+                self.tx
+                    .send(f.clone())
+                    .expect("[Replicator] Failed to send message for sink");
             }
             RequestCommand::Delete(_) => {
-                self.tx.send(f.clone()).expect("[Replicator] Failed to send message for sink");
+                self.tx
+                    .send(f.clone())
+                    .expect("[Replicator] Failed to send message for sink");
             }
             _ => {}
         }
@@ -142,17 +152,16 @@ impl Replicator {
             for x in rx.iter() {
                 replicas.iter().clone().for_each(|(_, mut replica)| {
                     let buf: Vec<u8> = Frame::new(x.clone()).into();
-                    replica.write(&*buf).expect("[Replicator] error while replicating");
+                    replica
+                        .write(&*buf)
+                        .expect("[Replicator] error while replicating");
                 });
             }
         });
 
-        Replicator {
-            tx,
-        }
+        Replicator { tx }
     }
 }
-
 
 #[derive(Debug)]
 pub struct Logger {
@@ -161,9 +170,7 @@ pub struct Logger {
 
 impl Logger {
     pub fn new(verbose: bool) -> Self {
-        Logger {
-            verbose
-        }
+        Logger { verbose }
     }
 }
 

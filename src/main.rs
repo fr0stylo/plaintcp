@@ -2,6 +2,7 @@ use std::error::Error;
 use std::thread;
 
 use clap::Parser;
+use libc::{SCHED_FIFO, sched_param, sched_setscheduler};
 
 use crate::cli::Args;
 
@@ -31,13 +32,10 @@ pub mod cli {
     }
 }
 
-pub mod proto;
 pub mod cache;
 pub mod client;
+pub mod proto;
 pub mod server;
-
-
-use libc::{sched_setscheduler, sched_param, SCHED_FIFO};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let param = sched_param { sched_priority: 99 };
@@ -69,4 +67,3 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     client::interactive(&args)
 }
-

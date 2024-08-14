@@ -34,19 +34,37 @@ impl Default for RequestCommand {
 impl Display for RequestCommand {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            RequestCommand::Empty => { write!(f, "EMPTY") }
+            RequestCommand::Empty => {
+                write!(f, "EMPTY")
+            }
 
-            RequestCommand::Get(key) => { write!(f, "GET {}", key) }
-            RequestCommand::Set(key, body) => { write!(f, "SET {}, {}", key, String::from_utf8(body.clone()).unwrap()) }
-            RequestCommand::Delete(key) => { write!(f, "DELETE {}", key) }
-            RequestCommand::Keys(take, skip) => { write!(f, "KEYS {} {}", take, skip) }
+            RequestCommand::Get(key) => {
+                write!(f, "GET {}", key)
+            }
+            RequestCommand::Set(key, body) => {
+                write!(
+                    f,
+                    "SET {}, {}",
+                    key,
+                    String::from_utf8(body.clone()).unwrap()
+                )
+            }
+            RequestCommand::Delete(key) => {
+                write!(f, "DELETE {}", key)
+            }
+            RequestCommand::Keys(take, skip) => {
+                write!(f, "KEYS {} {}", take, skip)
+            }
 
-            RequestCommand::Error(error) => { write!(f, "ERROR {}", String::from_utf8(error.clone()).unwrap()) }
-            RequestCommand::Recv(buf) => { write!(f, "<< {}", String::from_utf8(buf.clone()).unwrap()) }
+            RequestCommand::Error(error) => {
+                write!(f, "ERROR {}", String::from_utf8(error.clone()).unwrap())
+            }
+            RequestCommand::Recv(buf) => {
+                write!(f, "<< {}", String::from_utf8(buf.clone()).unwrap())
+            }
         }
     }
 }
-
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Frame {
@@ -103,8 +121,11 @@ pub fn decode<T: Read>(mut r: T) -> Result<Option<RequestCommand>, std::io::Erro
     Ok(Some(frame.command))
 }
 
-
-pub fn deserialize<T, R>(mut r: T) -> Result<Option<R>, std::io::Error> where T: Read, R: DeserializeOwned {
+pub fn deserialize<T, R>(mut r: T) -> Result<Option<R>, std::io::Error>
+where
+    T: Read,
+    R: DeserializeOwned,
+{
     let mut buf = [0u8; size_of::<usize>()];
 
     let i = r.read(&mut buf)?;

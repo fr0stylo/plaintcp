@@ -25,7 +25,10 @@ pub fn start(args: &Args) -> Result<(), Box<dyn Error>> {
         let str = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
 
         let t = SystemTime::now();
-        proto::encode(&con, &Frame::new(RequestCommand::Set(str.clone(), str.clone().into_bytes())))?;
+        proto::encode(
+            &con,
+            &Frame::new(RequestCommand::Set(str.clone(), str.clone().into_bytes())),
+        )?;
         let res = proto::decode(&con)?;
         println!("Response ({:?}) : {:?}", t.elapsed().unwrap(), res.unwrap());
         let t = SystemTime::now();
@@ -40,7 +43,10 @@ pub fn start(args: &Args) -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn execute_request(con: &std::net::TcpStream, frame: &RequestCommand) -> Result<Option<RequestCommand>, std::io::Error> {
+fn execute_request(
+    con: &std::net::TcpStream,
+    frame: &RequestCommand,
+) -> Result<Option<RequestCommand>, std::io::Error> {
     let mut con = con;
     let buf: Vec<u8> = Frame::new(frame.clone()).into();
     con.write(&*buf).expect("[Request] Error:");
@@ -54,12 +60,7 @@ pub fn interactive(args: &Args) -> Result<(), Box<dyn Error>> {
     let con = std::net::TcpStream::connect(addr).unwrap();
     con.set_nodelay(true)?;
     let mut p = Readline::default()
-        .enable_suggest(Suggest::from_iter([
-            "GET",
-            "SET",
-            "DELETE",
-            "KEYS"
-        ]))
+        .enable_suggest(Suggest::from_iter(["GET", "SET", "DELETE", "KEYS"]))
         .enable_history()
         .prompt()?;
 
@@ -70,7 +71,8 @@ pub fn interactive(args: &Args) -> Result<(), Box<dyn Error>> {
                 match Regex::new(r"^GET (\w*)").unwrap().captures(x) {
                     Some(x) => {
                         let key = x.get(1).unwrap().as_str();
-                        execute_request(&con, &RequestCommand::Get(key.to_owned())).expect("Failed to connect to remote")
+                        execute_request(&con, &RequestCommand::Get(key.to_owned()))
+                            .expect("Failed to connect to remote")
                     }
                     None => {
                         println!("GET <key>");
@@ -78,12 +80,16 @@ pub fn interactive(args: &Args) -> Result<(), Box<dyn Error>> {
                     }
                 }
             }
-            x  if Regex::new("^SET").unwrap().is_match(x) => {
+            x if Regex::new("^SET").unwrap().is_match(x) => {
                 match Regex::new(r"^SET (\w*) (.*)").unwrap().captures(x) {
                     Some(x) => {
                         let key = x.get(1).unwrap().as_str();
                         let body = x.get(2).unwrap().as_str();
-                        execute_request(&con, &RequestCommand::Set(key.to_owned(), body.as_bytes().into())).expect("Failed to connect to remote")
+                        execute_request(
+                            &con,
+                            &RequestCommand::Set(key.to_owned(), body.as_bytes().into()),
+                        )
+                        .expect("Failed to connect to remote")
                     }
                     None => {
                         println!("SET <key> <data>");
@@ -91,11 +97,12 @@ pub fn interactive(args: &Args) -> Result<(), Box<dyn Error>> {
                     }
                 }
             }
-            x  if Regex::new("^DELETE").unwrap().is_match(x) => {
+            x if Regex::new("^DELETE").unwrap().is_match(x) => {
                 match Regex::new(r"^DELETE (\w*)").unwrap().captures(x) {
                     Some(x) => {
                         let key = x.get(1).unwrap().as_str();
-                        execute_request(&con, &RequestCommand::Delete(key.to_owned())).expect("Failed to connect to remote")
+                        execute_request(&con, &RequestCommand::Delete(key.to_owned()))
+                            .expect("Failed to connect to remote")
                     }
                     None => {
                         println!("DELETE <key>");
@@ -103,12 +110,19 @@ pub fn interactive(args: &Args) -> Result<(), Box<dyn Error>> {
                     }
                 }
             }
-            x  if Regex::new(r"^KEYS").unwrap().is_match(x) => {
+            x if Regex::new(r"^KEYS").unwrap().is_match(x) => {
                 match Regex::new(r"^KEYS (\d+) (\d+)").unwrap().captures(x) {
                     Some(x) => {
                         let take = x.get(1).unwrap().as_str();
                         let skip = x.get(2).unwrap().as_str();
-                        execute_request(&con, &RequestCommand::Keys(usize::from_str(take).unwrap(), usize::from_str(skip).unwrap())).expect("Failed to connect to remote")
+                        execute_request(
+                            &con,
+                            &RequestCommand::Keys(
+                                usize::from_str(take).unwrap(),
+                                usize::from_str(skip).unwrap(),
+                            ),
+                        )
+                        .expect("Failed to connect to remote")
                     }
                     None => {
                         println!("KEYS <take> <skip>");
@@ -116,7 +130,7 @@ pub fn interactive(args: &Args) -> Result<(), Box<dyn Error>> {
                     }
                 }
             }
-            _ => { None }
+            _ => None,
         };
 
         match result {
